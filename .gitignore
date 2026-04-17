@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/data/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Editor / OS
+.DS_Store
+
+docs/PIPELINE.md
