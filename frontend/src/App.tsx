@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { useLocale } from "./i18n/LocaleProvider";
+import type { MessageKey } from "./i18n/strings";
 
 type JobResponse = {
   job_id: string;
@@ -33,19 +35,22 @@ function MarkdownResult({ source }: { source: string }) {
   );
 }
 
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: "待处理",
-    processing: "识别中",
-    done: "完成",
-    failed: "失败",
-  };
-  return map[status] ?? status;
+const STATUS_KEYS: Record<string, MessageKey> = {
+  pending: "statusPending",
+  processing: "statusProcessing",
+  done: "statusDone",
+  failed: "statusFailed",
+};
+
+function statusLabel(status: string, t: (k: MessageKey) => string): string {
+  const k = STATUS_KEYS[status];
+  return k ? t(k) : status;
 }
 
 type VisionMode = "stub" | "openrouter" | "openai" | "unconfigured" | "unknown";
 
 export function App() {
+  const { t, locale, setLocale } = useLocale();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [job, setJob] = useState<JobResponse | null>(null);
@@ -55,6 +60,10 @@ export function App() {
   const [kbPathInput, setKbPathInput] = useState("");
   const [kbPathSaving, setKbPathSaving] = useState(false);
   const [kbPathMessage, setKbPathMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setKbPathMessage(null);
+  }, [locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,9 +103,9 @@ export function App() {
   }, [refreshKb]);
 
   const rootSourceLabel = (s: KbRootSource): string => {
-    if (s === "env") return "环境变量 TOMATO_KB_DIR";
-    if (s === "user_config") return "已保存的自定义路径";
-    return "默认目录（未单独配置）";
+    if (s === "env") return t("kbSourceEnv");
+    if (s === "user_config") return t("kbSourceUser");
+    return t("kbSourceDefault");
   };
 
   const onKbSavePath = async () => {
@@ -111,14 +120,16 @@ export function App() {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setKbPathMessage(typeof data.detail === "string" ? data.detail : `保存失败 (${r.status})`);
+        setKbPathMessage(
+          typeof data.detail === "string" ? data.detail : t("errSaveFailed", { status: r.status }),
+        );
         return;
       }
       setKb(data as KbDashboard);
       setKbPathInput((data as KbDashboard).root);
-      setKbPathMessage("已保存。新笔记将写入该目录（可与代码仓库完全分离）。");
+      setKbPathMessage(t("kbSaveOk"));
     } catch {
-      setKbPathMessage("网络错误");
+      setKbPathMessage(t("errNetwork"));
     } finally {
       setKbPathSaving(false);
     }
@@ -132,14 +143,16 @@ export function App() {
       const r = await fetch("/api/kb/root", { method: "DELETE" });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setKbPathMessage(typeof data.detail === "string" ? data.detail : `恢复失败 (${r.status})`);
+        setKbPathMessage(
+          typeof data.detail === "string" ? data.detail : t("errResetFailed", { status: r.status }),
+        );
         return;
       }
       setKb(data as KbDashboard);
       setKbPathInput((data as KbDashboard).root);
-      setKbPathMessage("已恢复为默认知识库目录。");
+      setKbPathMessage(t("kbResetOk"));
     } catch {
-      setKbPathMessage("网络错误");
+      setKbPathMessage(t("errNetwork"));
     } finally {
       setKbPathSaving(false);
     }
@@ -189,7 +202,7 @@ export function App() {
         const s = await fetch(`/api/jobs/${created.job_id}/start`, { method: "POST" });
         if (!s.ok) throw new Error(`start: ${s.status}`);
 
-        setMessage("处理中…");
+        setMessage(t("processingMsg"));
         const last = await poll(created.job_id);
         setMessage(null);
         if (last?.status === "failed" && last.error) {
@@ -202,58 +215,74 @@ export function App() {
         setBusy(false);
       }
     },
-    [poll, refreshKb],
+    [poll, refreshKb, t],
   );
+
+  const dateLocale = locale === "zh" ? "zh-CN" : "en-US";
 
   return (
     <>
       <header className="app-header">
-        <div className="app-header__brand">
-          <div className="app-header__logo" aria-hidden>
-            🍅
+        <div className="app-header__top">
+          <div className="app-header__brand">
+            <div className="app-header__logo" aria-hidden>
+              🍅
+            </div>
+            <h1>{t("appTitle")}</h1>
           </div>
-          <h1>Tomato Note Graph</h1>
+          <div className="lang-switch" role="group" aria-label={t("langAria")}>
+            <button
+              type="button"
+              className={`lang-switch__btn${locale === "zh" ? " lang-switch__btn--active" : ""}`}
+              onClick={() => setLocale("zh")}
+              aria-pressed={locale === "zh"}
+            >
+              {t("langZh")}
+            </button>
+            <button
+              type="button"
+              className={`lang-switch__btn${locale === "en" ? " lang-switch__btn--active" : ""}`}
+              onClick={() => setLocale("en")}
+              aria-pressed={locale === "en"}
+            >
+              {t("langEn")}
+            </button>
+          </div>
         </div>
-        <p className="app-header__tagline">
-          上传手写笔记照片，由 LLM 转为 Markdown，并保存到本机<strong>个人知识库</strong>目录；后台定期整理索引。
-        </p>
+        <p className="app-header__tagline">{t("tagline")}</p>
       </header>
 
       {visionMode === "unconfigured" ? (
         <div className="alert alert--warn" role="status">
-          当前后端<strong>未配置识别服务</strong>：请在 <code>backend/.env</code> 中设置{" "}
-          <code>OPENROUTER_API_KEY</code>（推荐）或 <code>OPENAI_API_KEY</code>，重启 API 后再上传。联调 UI 可设{" "}
-          <code>TOMATO_USE_STUB=1</code>（固定假数据）。
+          {t("warnUnconfigured")}
         </div>
       ) : null}
       {kb ? (
         <section className="card card--kb" aria-labelledby="kb-heading">
           <h2 id="kb-heading" className="card__title">
-            个人知识库（本机目录）
+            {t("cardKbTitle")}
           </h2>
           <p className="kb-path">
-            <span className="kb-path__label">根目录</span>
+            <span className="kb-path__label">{t("rootDir")}</span>
             <code className="kb-path__value">{kb.root}</code>
           </p>
           <p className="kb-meta">
-            来源：<strong>{rootSourceLabel(kb.root_source)}</strong>。
+            {t("kbMetaSourcePrefix")}
+            <strong>{rootSourceLabel(kb.root_source)}</strong>
+            {locale === "zh" ? "。" : ". "}
             {kb.root_editable_via_ui ? (
-              <>
-                {" "}
-                自定义路径保存在 <code className="kb-inline-code">{kb.kb_settings_file}</code>（在数据目录内，不包含笔记正文）。
-              </>
+              <>{t("kbMetaCustomPath", { path: kb.kb_settings_file })}</>
             ) : (
-              <> 当前由环境变量锁定，请在 <code>.env</code> 中修改 <code>TOMATO_KB_DIR</code> 并重启后端。</>
+              <>{t("kbMetaEnvLocked")}</>
             )}
           </p>
           <p className="kb-meta">
-            笔记文件位于 <code>{kb.notes_subdir}</code>；总览与整理见根目录{" "}
-            <code>{kb.index_file}</code>（由维护任务自动生成）。
+            {t("kbMetaNotesLocation", { notes: kb.notes_subdir, index: kb.index_file })}
           </p>
           {kb.root_editable_via_ui ? (
             <div className="kb-path-form">
               <label className="kb-path-form__label" htmlFor="kb-root-input">
-                知识库根目录（本机绝对路径，可指向仓库外任意文件夹）
+                {t("kbPathLabel")}
               </label>
               <div className="kb-path-form__row">
                 <input
@@ -262,13 +291,13 @@ export function App() {
                   className="kb-path-form__input"
                   value={kbPathInput}
                   onChange={(e) => setKbPathInput(e.target.value)}
-                  placeholder="/Users/you/Documents/MyVault"
+                  placeholder={t("placeholderVault")}
                   autoComplete="off"
                   spellCheck={false}
                   disabled={kbPathSaving}
                 />
                 <button type="button" className="btn-secondary" disabled={kbPathSaving} onClick={() => void onKbSavePath()}>
-                  {kbPathSaving ? "保存中…" : "保存"}
+                  {kbPathSaving ? t("btnSaving") : t("btnSave")}
                 </button>
                 <button
                   type="button"
@@ -276,26 +305,27 @@ export function App() {
                   disabled={kbPathSaving}
                   onClick={() => void onKbResetPath()}
                 >
-                  恢复默认
+                  {t("btnResetDefault")}
                 </button>
               </div>
               {kbPathMessage ? <p className="kb-path-form__hint">{kbPathMessage}</p> : null}
             </div>
           ) : null}
           <div className="kb-stats">
-            <span className="badge badge--neutral">已存笔记 {kb.note_count} 条</span>
+            <span className="badge badge--neutral">{t("badgeNotesCount", { count: kb.note_count })}</span>
             {kb.last_maintenance_at ? (
               <span className="badge badge--neutral">
-                最近整理 {new Date(kb.last_maintenance_at).toLocaleString()}
+                {t("badgeLastMaintained")}{" "}
+                {new Date(kb.last_maintenance_at).toLocaleString(dateLocale)}
                 {kb.last_maintenance_mode ? ` · ${kb.last_maintenance_mode}` : ""}
               </span>
             ) : (
-              <span className="badge badge--neutral">尚未跑过整理</span>
+              <span className="badge badge--neutral">{t("badgeNoMaintenanceYet")}</span>
             )}
           </div>
           <div className="kb-actions">
             <button type="button" className="btn-secondary" disabled={kbMaintaining} onClick={() => void onKbMaintain()}>
-              {kbMaintaining ? "正在整理…" : "立即整理知识库"}
+              {kbMaintaining ? t("btnMaintaining") : t("btnMaintain")}
             </button>
           </div>
         </section>
@@ -303,32 +333,29 @@ export function App() {
 
       {visionMode === "stub" ? (
         <div className="alert alert--warn" role="status">
-          当前为占位模式（无 API Key 且 <code>TOMATO_USE_STUB=1</code>，或 <code>TOMATO_FORCE_STUB=1</code>
-          ），结果为固定示例 Markdown。配置 Key 并重启后一般会变为真实识别。
+          {t("warnStub")}
         </div>
       ) : null}
 
       <section className="card card--hero" aria-labelledby="upload-heading">
         <h2 id="upload-heading" className="card__title">
-          上传笔记
+          {t("uploadSection")}
         </h2>
         <div className="upload-row">
           <label className="upload-btn">
             <span className="upload-btn__icon" aria-hidden>
               📷
             </span>
-            选择照片
+            {t("choosePhoto")}
             <input type="file" accept="image/*" disabled={busy} onChange={(e) => void onFile(e.target.files?.[0])} />
           </label>
           {busy ? (
             <div className="processing">
               <span className="spinner" aria-hidden />
-              正在识别手写内容…
+              {t("processing")}
             </div>
           ) : (
-            <p className="hint">
-              支持常见图片格式，<strong>尽量拍平、光线均匀</strong>，字迹更清晰。
-            </p>
+            <p className="hint">{t("hintPhoto")}</p>
           )}
         </div>
         {message ? <div className="inline-error">{message}</div> : null}
@@ -337,14 +364,14 @@ export function App() {
       {job ? (
         <section className="card" aria-labelledby="result-heading">
           <h2 id="result-heading" className="card__title">
-            识别结果
+            {t("resultSection")}
           </h2>
           <div className="badge-row">
             <span className={`badge ${job.status === "failed" ? "badge--fail" : job.status === "done" ? "badge--ok" : "badge--neutral"}`}>
-              {statusLabel(job.status)}
+              {statusLabel(job.status, t)}
             </span>
             <span className="badge badge--neutral">
-              任务 ID <code>{job.job_id.slice(0, 8)}…</code>
+              {t("taskId")} <code>{job.job_id.slice(0, 8)}…</code>
             </span>
           </div>
           {job.status === "failed" && job.error ? <div className="job-error">{job.error}</div> : null}
@@ -352,12 +379,12 @@ export function App() {
             <>
               {job.kb_note_relative ? (
                 <p className="kb-save-hint">
-                  已写入知识库：<code>{job.kb_note_relative}</code>（相对知识库根目录）
+                  {t("savedToKb", { path: job.kb_note_relative })}
                 </p>
               ) : null}
               <MarkdownResult source={job.markdown} />
               <details className="markdown-details">
-                <summary>查看 Markdown 源码</summary>
+                <summary>{t("viewMarkdownSource")}</summary>
                 <pre>{job.markdown}</pre>
               </details>
             </>
@@ -366,7 +393,7 @@ export function App() {
               <div className="empty-hint__icon" aria-hidden>
                 📭
               </div>
-              未返回 Markdown 内容
+              {t("noMarkdown")}
             </p>
           ) : null}
         </section>
@@ -374,7 +401,7 @@ export function App() {
         <section className="card">
           <div className="empty-hint">
             <div className="empty-hint__icon">📝</div>
-            上传一张照片开始
+            {t("emptyUpload")}
           </div>
         </section>
       ) : null}
