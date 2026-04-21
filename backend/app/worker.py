@@ -29,6 +29,12 @@ _USER = """任务：
 
 直接输出 Markdown；不要用 markdown 代码围栏包裹全文。"""
 
+_TEXT_SYSTEM = """你是笔记整理助手。用户提供一段原始文字（可为中文或英文草稿、速记、复制粘贴）。
+请将内容整理成结构清晰的 Markdown：适当使用一级标题概括主题（便于保存为文件名）、列表、**粗体**；不要臆造事实；可微调标点与分段。
+只输出 Markdown 正文，不要全文代码围栏，不要前言或后记。"""
+
+_TEXT_USER_PREFIX = "以下为用户输入的原始文字，请整理为 Markdown：\n\n"
+
 
 class VisionNotConfiguredError(RuntimeError):
     """未配置 OPENROUTER_API_KEY 或 OPENAI_API_KEY 时抛出。"""
@@ -188,6 +194,11 @@ def _stub_markdown() -> str:
     )
 
 
+def _stub_text_markdown() -> str:
+    """文字输入占位输出。"""
+    return "# 文字笔记（stub）\n\n- 要点一\n- 要点二\n"
+
+
 def _has_vision_key() -> bool:
     return bool(os.environ.get("OPENROUTER_API_KEY", "").strip()) or bool(
         os.environ.get("OPENAI_API_KEY", "").strip()
@@ -233,3 +244,65 @@ def run_pipeline(image_path: Path) -> str:
 
     blob, mime = _image_bytes_for_api(image_path)
     return _vision_markdown(blob, mime)
+
+
+def _text_to_markdown(raw: str) -> str:
+    """纯文本 → 结构化 Markdown（无多模态）。"""
+    client = _build_client()
+    model = _resolve_model()
+    max_in = int(os.environ.get("TOMATO_TEXT_INPUT_MAX_CHARS", "32000"))
+    text = raw.strip()
+    if len(text) > max_in:
+        text = text[:max_in]
+    attempts: list[tuple[str, dict[str, object]]] = [
+        ("v1", {"user_suffix": "", "temperature": 0.2}),
+        ("v2", {"user_suffix": "\n\n务必只输出 Markdown 正文。", "temperature": 0.15}),
+    ]
+    last_err: Exception | None = None
+    for name, cfg in attempts:
+        try:
+            kwargs: dict[str, object] = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": _TEXT_SYSTEM},
+                    {
+                        "role": "user",
+                        "content": _TEXT_USER_PREFIX + text + str(cfg["user_suffix"]),
+                    },
+                ],
+                "max_tokens": min(_MAX_TOKENS, 8192),
+            }
+            if cfg["temperature"] is not None:
+                kwargs["temperature"] = cfg["temperature"]
+            completion = client.chat.completions.create(**kwargs)
+            out = (completion.choices[0].message.content or "").strip()
+            out = _strip_outer_code_fence(out)
+            if not out:
+                raise ValueError("model_returned_empty_content")
+            return out
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            logger.warning("text 整理策略 %s 失败: %s", name, _format_api_error(e))
+    assert last_err is not None
+    raise RuntimeError(_format_api_error(last_err)) from last_err
+
+
+def run_text_pipeline(raw_text: str) -> str:
+    """将用户输入文字整理为 Markdown；需 OPENROUTER_API_KEY 或 OPENAI_API_KEY（与图片流程相同）。"""
+    force_stub = os.environ.get("TOMATO_FORCE_STUB", "").strip().lower() in ("1", "true", "yes")
+    stub_env = os.environ.get("TOMATO_USE_STUB", "").strip().lower() in ("1", "true", "yes")
+
+    if force_stub:
+        logger.info("TOMATO_FORCE_STUB：文字占位 Markdown")
+        return _stub_text_markdown()
+
+    if stub_env and not _has_vision_key():
+        return _stub_text_markdown()
+
+    if stub_env and _has_vision_key():
+        logger.warning(
+            "已配置 API Key，已忽略 TOMATO_USE_STUB（文字任务）。"
+            " 无 Key 联调可保留 TOMATO_USE_STUB；有 Key 仍要假数据请用 TOMATO_FORCE_STUB=1。"
+        )
+
+    return _text_to_markdown(raw_text)

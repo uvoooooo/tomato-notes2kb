@@ -25,6 +25,7 @@ from app.knowledge_base import (
     set_user_kb_root,
 )
 from app.worker import run_pipeline as run_pipeline_sync
+from app.worker import run_text_pipeline as run_text_pipeline_sync
 
 _backend_root = Path(__file__).resolve().parent.parent
 load_dotenv(_backend_root / ".env")
@@ -96,9 +97,14 @@ app.add_middleware(
 )
 
 
+def _max_text_input_chars() -> int:
+    return max(1, min(500_000, int(os.environ.get("TOMATO_TEXT_INPUT_MAX_CHARS", "32000"))))
+
+
 class CreateJobResponse(BaseModel):
     job_id: str
-    upload_path: str = Field(description="相对 API 根路径，POST multipart 到此地址")
+    upload_path: str = Field(description="相对 API 根路径，POST multipart 上传照片")
+    text_path: str = Field(description="POST JSON {\"text\": \"...\"} 提交纯文字笔记")
 
 
 class JobStatusResponse(BaseModel):
@@ -117,6 +123,10 @@ class KbRootUpdate(BaseModel):
     path: str = Field(..., min_length=1, description="本机目录绝对路径或带 ~ 的路径")
 
 
+class TextJobBody(BaseModel):
+    text: str = Field(..., min_length=1, description="原始文字，将经 LLM 整理为 Markdown")
+
+
 def _maybe_kb_maintain_on_save(kb_root: Path) -> None:
     on_save = os.environ.get("TOMATO_KB_MAINTENANCE_ON_SAVE", "1").strip().lower() not in ("0", "false", "no")
     if not on_save:
@@ -133,20 +143,32 @@ def _maybe_kb_maintain_on_save(kb_root: Path) -> None:
 
 def _process_job(job_id: str) -> None:
     row = store.get(job_id)
-    if row is None or not row.image_path:
-        logger.error("process_job: missing job or image job_id=%s", job_id)
+    if row is None:
+        logger.error("process_job: missing job job_id=%s", job_id)
         return
-    image_path = Path(row.image_path)
-    if not image_path.is_file():
-        store.set_status(job_id, "failed", error="image_missing")
+    has_image = bool(row.image_path)
+    has_text = bool(row.text_content and row.text_content.strip())
+    if not has_image and not has_text:
+        logger.error("process_job: no image or text job_id=%s", job_id)
         return
     store.set_status(job_id, "processing")
     try:
-        md = run_pipeline_sync(image_path)
-        kb_rel: str | None = None
         kb_root = resolve_kb_root(DATA_DIR)
+        source = "handwritten-photo"
+        if has_image:
+            image_path = Path(row.image_path or "")
+            if not image_path.is_file():
+                store.set_status(job_id, "failed", error="image_missing")
+                return
+            md = run_pipeline_sync(image_path)
+        else:
+            md = run_text_pipeline_sync(row.text_content or "")
+            source = "text-input"
+        kb_rel: str | None = None
         try:
-            _, kb_rel = save_note_markdown(kb_root, job_id, row.created_at, md)
+            _, kb_rel = save_note_markdown(
+                kb_root, job_id, row.created_at, md, source=source
+            )
         except Exception:
             logger.exception("写入本地知识库失败 job_id=%s", job_id)
         store.set_done(job_id, md, kb_note_relative=kb_rel)
@@ -160,7 +182,11 @@ def _process_job(job_id: str) -> None:
 @app.post("/api/jobs", response_model=CreateJobResponse)
 def create_job() -> CreateJobResponse:
     job_id = store.create_job()
-    return CreateJobResponse(job_id=job_id, upload_path=f"/api/jobs/{job_id}/upload")
+    return CreateJobResponse(
+        job_id=job_id,
+        upload_path=f"/api/jobs/{job_id}/upload",
+        text_path=f"/api/jobs/{job_id}/text",
+    )
 
 
 @app.post("/api/jobs/{job_id}/upload")
@@ -170,6 +196,8 @@ async def upload_image(job_id: str, file: UploadFile = File(...)) -> dict[str, s
         raise HTTPException(status_code=404, detail="job_not_found")
     if row.status != "pending":
         raise HTTPException(status_code=400, detail="job_not_pending")
+    if row.text_content and row.text_content.strip():
+        raise HTTPException(status_code=400, detail="text_already_set")
     ext = Path(file.filename or "image").suffix.lower()
     if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".bmp"}:
         ext = ".jpg"
@@ -185,6 +213,24 @@ async def upload_image(job_id: str, file: UploadFile = File(...)) -> dict[str, s
     return {"job_id": job_id, "saved": str(dest.name)}
 
 
+@app.post("/api/jobs/{job_id}/text")
+def submit_job_text(job_id: str, body: TextJobBody) -> dict[str, str]:
+    """为待处理任务提交纯文字内容（与上传照片二选一）。"""
+    row = store.get(job_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    if row.status != "pending":
+        raise HTTPException(status_code=400, detail="job_not_pending")
+    if row.image_path:
+        raise HTTPException(status_code=400, detail="image_already_set")
+    max_c = _max_text_input_chars()
+    if len(body.text) > max_c:
+        raise HTTPException(status_code=400, detail=f"text_too_long max_chars={max_c}")
+    if not store.set_text_content(job_id, body.text):
+        raise HTTPException(status_code=400, detail="job_not_pending")
+    return {"job_id": job_id, "saved": "text"}
+
+
 @app.post("/api/jobs/{job_id}/start")
 def start_job(job_id: str, background_tasks: BackgroundTasks) -> dict[str, str]:
     row = store.get(job_id)
@@ -192,8 +238,9 @@ def start_job(job_id: str, background_tasks: BackgroundTasks) -> dict[str, str]:
         raise HTTPException(status_code=404, detail="job_not_found")
     if row.status != "pending":
         raise HTTPException(status_code=400, detail="invalid_state")
-    if not row.image_path:
-        raise HTTPException(status_code=400, detail="no_image")
+    has_in = bool(row.image_path) or bool(row.text_content and row.text_content.strip())
+    if not has_in:
+        raise HTTPException(status_code=400, detail="no_input")
     background_tasks.add_task(_process_job, job_id)
     return {"job_id": job_id, "status": "queued"}
 

@@ -197,7 +197,14 @@ def _first_heading_line(text: str) -> str | None:
     return None
 
 
-def save_note_markdown(kb_root: Path, job_id: str, created_at_iso: str, markdown: str) -> tuple[Path, str]:
+def save_note_markdown(
+    kb_root: Path,
+    job_id: str,
+    created_at_iso: str,
+    markdown: str,
+    *,
+    source: str = "handwritten-photo",
+) -> tuple[Path, str]:
     """将识别结果写入知识库 notes 目录；文件名由知识点内容推断。
 
     返回 (绝对路径, 相对知识库根的路径，如 notes/微积分-复习.md)。
@@ -211,7 +218,7 @@ def save_note_markdown(kb_root: Path, job_id: str, created_at_iso: str, markdown
         "---\n"
         f'job_id: "{job_id}"\n'
         f"created_at: {created_at_iso}\n"
-        "source: handwritten-photo\n"
+        f"source: {source}\n"
         "---\n\n"
     )
     path.write_text(fm + markdown.strip() + "\n", encoding="utf-8")

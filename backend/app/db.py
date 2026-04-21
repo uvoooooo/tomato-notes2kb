@@ -21,6 +21,7 @@ class JobRow:
     created_at: str
     error: str | None
     image_path: str | None
+    text_content: str | None
     markdown: str | None
     kb_note_relative: str | None = None
 
@@ -50,6 +51,10 @@ class JobStore:
                 )
                 """
             )
+            cur = conn.execute("PRAGMA table_info(jobs)")
+            cols = {row[1] for row in cur.fetchall()}
+            if "text_content" not in cols:
+                conn.execute("ALTER TABLE jobs ADD COLUMN text_content TEXT")
 
     def create_job(self) -> str:
         job_id = str(uuid.uuid4())
@@ -65,8 +70,24 @@ class JobStore:
         with _lock:
             with self._connect() as conn:
                 cur = conn.execute(
-                    "UPDATE jobs SET image_path = ? WHERE id = ? AND status = 'pending'",
+                    """
+                    UPDATE jobs SET image_path = ?
+                    WHERE id = ? AND status = 'pending'
+                      AND (text_content IS NULL OR trim(text_content) = '')
+                    """,
                     (image_path, job_id),
+                )
+                return cur.rowcount == 1
+
+    def set_text_content(self, job_id: str, text: str) -> bool:
+        with _lock:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    """
+                    UPDATE jobs SET text_content = ?
+                    WHERE id = ? AND status = 'pending' AND image_path IS NULL
+                    """,
+                    (text, job_id),
                 )
                 return cur.rowcount == 1
 
@@ -112,12 +133,18 @@ class JobStore:
                 kr = parsed.get("kb_note_relative")
                 if isinstance(kr, str) and kr.strip():
                     kb_rel = kr.strip()
+        tx: str | None = None
+        if "text_content" in row.keys():
+            raw_tx = row["text_content"]
+            if isinstance(raw_tx, str) and raw_tx.strip():
+                tx = raw_tx
         return JobRow(
             id=row["id"],
             status=row["status"],
             created_at=row["created_at"],
             error=row["error"],
             image_path=row["image_path"],
+            text_content=tx,
             markdown=md,
             kb_note_relative=kb_rel,
         )

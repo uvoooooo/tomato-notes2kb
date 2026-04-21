@@ -36,9 +36,14 @@ export const STRINGS: Record<
     badgeLastMaintained: string;
     badgeNoMaintenanceYet: string;
     warnStub: string;
-    uploadSection: string;
+    addContentSection: string;
+    uploadPhotoSubtitle: string;
+    textInputSubtitle: string;
+    textPlaceholder: string;
+    btnConvertText: string;
     choosePhoto: string;
     processing: string;
+    processingText: string;
     hintPhoto: string;
     resultSection: string;
     taskId: string;
@@ -55,9 +60,9 @@ export const STRINGS: Record<
 > = {
   zh: {
     appTitle: "Tomato Notes2KB",
-    documentTitleSuffix: "手写笔记 → Markdown",
+    documentTitleSuffix: "笔记 → Markdown",
     tagline:
-      "上传手写笔记照片，由 LLM 转为 Markdown，并保存到本机个人知识库目录；后台定期整理索引。",
+      "上传手写照片或粘贴/输入文字，由 LLM 整理为 Markdown，并保存到本机个人知识库；后台可定期维护索引。",
     langZh: "中文",
     langEn: "English",
     langAria: "界面语言",
@@ -91,16 +96,21 @@ export const STRINGS: Record<
     badgeNoMaintenanceYet: "尚未跑过整理",
     warnStub:
       "当前为占位模式（无 API Key 且 TOMATO_USE_STUB=1，或 TOMATO_FORCE_STUB=1），结果为固定示例 Markdown。配置 Key 并重启后一般会变为真实识别。",
-    uploadSection: "上传笔记",
+    addContentSection: "添加笔记",
+    uploadPhotoSubtitle: "从照片",
+    textInputSubtitle: "从文字",
+    textPlaceholder: "在此粘贴课堂草稿、清单、备忘录等，将整理为结构化 Markdown。",
+    btnConvertText: "转为 Markdown 笔记",
     choosePhoto: "选择照片",
     processing: "正在识别手写内容…",
+    processingText: "正在整理文字…",
     hintPhoto: "支持常见图片格式，尽量拍平、光线均匀，字迹更清晰。",
     resultSection: "识别结果",
     taskId: "任务 ID",
     savedToKb: "已写入知识库：{{path}}（相对知识库根目录）",
     viewMarkdownSource: "查看 Markdown 源码",
     noMarkdown: "未返回 Markdown 内容",
-    emptyUpload: "上传一张照片开始",
+    emptyUpload: "上传照片或输入文字以开始",
     statusPending: "待处理",
     statusProcessing: "识别中",
     statusDone: "完成",
@@ -109,9 +119,9 @@ export const STRINGS: Record<
   },
   en: {
     appTitle: "Tomato Notes2KB",
-    documentTitleSuffix: "Handwriting → Markdown",
+    documentTitleSuffix: "Notes → Markdown",
     tagline:
-      "Upload a photo of handwritten notes. An LLM converts them to Markdown and saves them to your local knowledge base; maintenance keeps the index up to date.",
+      "Upload a photo or paste text. An LLM turns it into Markdown and saves it to your local knowledge base; optional periodic maintenance updates the index.",
     langZh: "中文",
     langEn: "English",
     langAria: "Interface language",
@@ -144,16 +154,21 @@ export const STRINGS: Record<
     badgeNoMaintenanceYet: "No maintenance run yet",
     warnStub:
       "Stub mode (no API key with TOMATO_USE_STUB=1, or TOMATO_FORCE_STUB=1): fixed sample Markdown. Configure a key and restart for real recognition.",
-    uploadSection: "Upload",
+    addContentSection: "Add a note",
+    uploadPhotoSubtitle: "From photo",
+    textInputSubtitle: "From text",
+    textPlaceholder: "Paste drafts, lists, or memos here. They will be structured as Markdown.",
+    btnConvertText: "Convert to Markdown",
     choosePhoto: "Choose photo",
     processing: "Recognizing handwriting…",
+    processingText: "Structuring text…",
     hintPhoto: "Common image formats supported. Shoot flat with even lighting for clearer text.",
     resultSection: "Result",
     taskId: "Job ID",
     savedToKb: "Saved to vault: {{path}} (relative to vault root)",
     viewMarkdownSource: "View Markdown source",
     noMarkdown: "No Markdown returned",
-    emptyUpload: "Upload a photo to start",
+    emptyUpload: "Upload a photo or enter text below to start",
     statusPending: "Pending",
     statusProcessing: "Processing",
     statusDone: "Done",

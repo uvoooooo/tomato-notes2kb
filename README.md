@@ -81,6 +81,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 | `TOMATO_KB_MAINTENANCE_MAX_TOKENS` | 可选，整理输出上限，默认 `4096` |
 | `TOMATO_KB_MANIFEST_MAX_CHARS` | 可选，维护时笔记摘录总字数上限，默认 `28000` |
 | `TOMATO_KB_NOTE_NAME_MAX_LEN` | 可选，由知识点标题生成的文件名主体最大字符数，默认 `72`，范围约 16–200 |
+| `TOMATO_TEXT_INPUT_MAX_CHARS` | 可选，单条文字笔记输入最大字符数，默认 `32000` |
 
 在 `backend/.env` 中配置（启动时已自动加载），例如 OpenRouter：
 
@@ -112,15 +113,16 @@ npm run dev
 
 ### 3. 试用
 
-配置好 `OPENROUTER_API_KEY` 或 `OPENAI_API_KEY` 后，在页面选择手写笔记照片 → 自动处理 → 展示 **Markdown**，并**保存到本机知识库目录**；可在「个人知识库」卡片中**自定义根目录**（任意本机路径，包括仓库外），或触发「立即整理」以更新 `知识库索引.md`。未配置 Key 时任务会失败，页面顶部也会提示；无 Key 联调 UI 可设 `TOMATO_USE_STUB=1`。若 `.env` 里曾开过 `TOMATO_USE_STUB=1` 且已填入 Key，现在会**自动走真实识别**，无需再手动删（仍想用假数据可设 `TOMATO_FORCE_STUB=1`）。
+配置好 `OPENROUTER_API_KEY` 或 `OPENAI_API_KEY` 后，在页面**上传手写照片**或**粘贴文字** → 自动处理 → 展示 **Markdown**，并**保存到本机知识库目录**；可在「个人知识库」卡片中**自定义根目录**（任意本机路径，包括仓库外），或触发「立即整理」以更新 `知识库索引.md`。未配置 Key 时任务会失败，页面顶部也会提示；无 Key 联调 UI 可设 `TOMATO_USE_STUB=1`。若 `.env` 里曾开过 `TOMATO_USE_STUB=1` 且已填入 Key，现在会**自动走真实识别**，无需再手动删（仍想用假数据可设 `TOMATO_FORCE_STUB=1`）。
 
 ## API 摘要
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/jobs` | 创建任务，返回 `job_id` 与 `upload_path` |
-| POST | `/api/jobs/{id}/upload` | `multipart/form-data`，字段名 `file` |
-| POST | `/api/jobs/{id}/start` | 入队处理（当前为进程内 BackgroundTasks） |
+| POST | `/api/jobs` | 创建任务，返回 `job_id`、`upload_path`（照片）与 `text_path`（文字） |
+| POST | `/api/jobs/{id}/upload` | `multipart/form-data`，字段名 `file`（与下方 `text` 二选一） |
+| POST | `/api/jobs/{id}/text` | JSON `{"text":"..."}` 提交纯文字（与上传照片二选一） |
+| POST | `/api/jobs/{id}/start` | 在已上传照片**或**已提交文字后入队处理 |
 | GET | `/api/jobs/{id}` | 查询状态；`done` 时含 `markdown`；`kb_note_relative` 为笔记在知识库内的相对路径 |
 | GET | `/api/kb` | 知识库根目录、`root_source`（env / user_config / default）、是否可在线编辑等 |
 | PUT | `/api/kb/root` | JSON `{"path":"/绝对路径"}` 保存自定义根目录（写入 `kb_root.json`）；若已设 `TOMATO_KB_DIR` 则拒绝 |

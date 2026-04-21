@@ -60,6 +60,8 @@ export function App() {
   const [kbPathInput, setKbPathInput] = useState("");
   const [kbPathSaving, setKbPathSaving] = useState(false);
   const [kbPathMessage, setKbPathMessage] = useState<string | null>(null);
+  const [textDraft, setTextDraft] = useState("");
+  const [busyMode, setBusyMode] = useState<"photo" | "text" | null>(null);
 
   useEffect(() => {
     setKbPathMessage(null);
@@ -187,6 +189,7 @@ export function App() {
     async (file: File | undefined) => {
       if (!file) return;
       setBusy(true);
+      setBusyMode("photo");
       setMessage(null);
       setJob(null);
       try {
@@ -213,10 +216,48 @@ export function App() {
         setMessage(e instanceof Error ? e.message : "unknown error");
       } finally {
         setBusy(false);
+        setBusyMode(null);
       }
     },
     [poll, refreshKb, t],
   );
+
+  const onTextSubmit = useCallback(async () => {
+    const raw = textDraft.trim();
+    if (!raw) return;
+    setBusy(true);
+    setBusyMode("text");
+    setMessage(null);
+    setJob(null);
+    try {
+      const c = await fetch("/api/jobs", { method: "POST" });
+      if (!c.ok) throw new Error(`create job: ${c.status}`);
+      const created: { job_id: string; text_path: string } = await c.json();
+
+      const tx = await fetch(created.text_path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: raw }),
+      });
+      if (!tx.ok) throw new Error(`text: ${tx.status}`);
+
+      const s = await fetch(`/api/jobs/${created.job_id}/start`, { method: "POST" });
+      if (!s.ok) throw new Error(`start: ${s.status}`);
+
+      setMessage(t("processingMsg"));
+      const last = await poll(created.job_id);
+      setMessage(null);
+      if (last?.status === "failed" && last.error) {
+        setMessage(last.error);
+      }
+      await refreshKb();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "unknown error");
+    } finally {
+      setBusy(false);
+      setBusyMode(null);
+    }
+  }, [poll, refreshKb, t, textDraft]);
 
   const dateLocale = locale === "zh" ? "zh-CN" : "en-US";
 
@@ -337,10 +378,11 @@ export function App() {
         </div>
       ) : null}
 
-      <section className="card card--hero" aria-labelledby="upload-heading">
-        <h2 id="upload-heading" className="card__title">
-          {t("uploadSection")}
+      <section className="card card--hero" aria-labelledby="add-content-heading">
+        <h2 id="add-content-heading" className="card__title">
+          {t("addContentSection")}
         </h2>
+        <h3 className="card__subtitle">{t("uploadPhotoSubtitle")}</h3>
         <div className="upload-row">
           <label className="upload-btn">
             <span className="upload-btn__icon" aria-hidden>
@@ -349,14 +391,42 @@ export function App() {
             {t("choosePhoto")}
             <input type="file" accept="image/*" disabled={busy} onChange={(e) => void onFile(e.target.files?.[0])} />
           </label>
-          {busy ? (
+          {busy && busyMode === "photo" ? (
             <div className="processing">
               <span className="spinner" aria-hidden />
               {t("processing")}
             </div>
-          ) : (
+          ) : !busy ? (
             <p className="hint">{t("hintPhoto")}</p>
-          )}
+          ) : null}
+        </div>
+        <h3 className="card__subtitle card__subtitle--spaced">{t("textInputSubtitle")}</h3>
+        <div className="text-input-block">
+          <textarea
+            className="text-input-block__area"
+            value={textDraft}
+            onChange={(e) => setTextDraft(e.target.value)}
+            placeholder={t("textPlaceholder")}
+            rows={6}
+            disabled={busy}
+            spellCheck={true}
+          />
+          <div className="text-input-block__actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={busy || !textDraft.trim()}
+              onClick={() => void onTextSubmit()}
+            >
+              {t("btnConvertText")}
+            </button>
+            {busy && busyMode === "text" ? (
+              <div className="processing processing--inline">
+                <span className="spinner" aria-hidden />
+                {t("processingText")}
+              </div>
+            ) : null}
+          </div>
         </div>
         {message ? <div className="inline-error">{message}</div> : null}
       </section>
