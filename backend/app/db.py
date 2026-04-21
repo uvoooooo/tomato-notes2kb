@@ -7,8 +7,6 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-
 _lock = threading.Lock()
 
 
@@ -23,7 +21,8 @@ class JobRow:
     created_at: str
     error: str | None
     image_path: str | None
-    mindmap_json: dict[str, Any] | None
+    markdown: str | None
+    kb_note_relative: str | None = None
 
 
 class JobStore:
@@ -80,8 +79,11 @@ class JobStore:
                 )
                 return cur.rowcount == 1
 
-    def set_done(self, job_id: str, mindmap: dict[str, Any]) -> None:
-        payload = json.dumps(mindmap, ensure_ascii=False)
+    def set_done(self, job_id: str, markdown: str, kb_note_relative: str | None = None) -> None:
+        data: dict[str, str] = {"markdown": markdown}
+        if kb_note_relative:
+            data["kb_note_relative"] = kb_note_relative
+        payload = json.dumps(data, ensure_ascii=False)
         with _lock:
             with self._connect() as conn:
                 conn.execute(
@@ -95,15 +97,27 @@ class JobStore:
                 row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         if row is None:
             return None
-        mindmap: dict[str, Any] | None = None
+        md: str | None = None
+        kb_rel: str | None = None
         raw = row["mindmap_json"]
         if raw:
-            mindmap = json.loads(raw)
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                m = parsed.get("markdown")
+                if isinstance(m, str) and m.strip():
+                    md = m
+                kr = parsed.get("kb_note_relative")
+                if isinstance(kr, str) and kr.strip():
+                    kb_rel = kr.strip()
         return JobRow(
             id=row["id"],
             status=row["status"],
             created_at=row["created_at"],
             error=row["error"],
             image_path=row["image_path"],
-            mindmap_json=mindmap,
+            markdown=md,
+            kb_note_relative=kb_rel,
         )
