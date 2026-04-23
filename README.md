@@ -1,107 +1,70 @@
-# Tomato Notes2KB
+# Tomato Note Graph
 
-手写笔记拍照 → **Markdown 文本**（MVP 骨架）。设计见 [docs/PIPELINE.md](docs/PIPELINE.md)。
+**English** · [简体中文](README.ch.md)
 
-## 运行方式
+Turn **handwritten note photos** or **raw text** into **structured Markdown** with a vision/chat model, then save the output to a local **personal knowledge base**. Includes a React web UI for uploads, job polling, preview, and knowledge-base path settings. You can also open the generated files with a Markdown preview extension (e.g. a *Markdown Viewer*–style plugin for Chrome) for fully local, lightweight reading.
 
-需要本机已安装 **Python 3.11+** 与 **Node.js 20+**。
+## What it does
 
-### 1. 后端
+- **Photo notes**: Upload a common image format (one image per job) and have a vision model transcribe it into readable Markdown (headings, lists, bold, etc.).
+- **Plain text notes**: For the same job, paste text instead, and a model will structure it as Markdown (choose either upload or text, not both).
+- **Local knowledge base**: On success, notes are written under a directory you configure (by default `knowledge_base/notes/` under the data directory), with optional maintenance of a “knowledge index” and related files; the path is configurable via environment variables or the web UI (see below).
+
+No public image hosting required: originals and SQLite metadata live under `backend/data/` on your machine (the data directory can be changed with env vars).
+
+## Stack
+
+| Part | Description |
+|------|-------------|
+| Backend | Python 3, [FastAPI](https://fastapi.tiangolo.com/), SQLite for jobs, pipeline runs in a background task |
+| Frontend | React 19, Vite 6; dev server proxies API calls to the backend |
+| Models | [OpenAI-compatible API](https://platform.openai.com/docs/api-reference); [OpenRouter](https://openrouter.ai/) is recommended; you can also set `OPENAI_*` directly |
+
+## Repository layout
+
+```
+tomato-note-graph/
+├── backend/
+│   ├── app/           # API, job store, knowledge base, worker pipeline
+│   ├── .env.example   # Copy to .env
+│   └── requirements.txt
+├── frontend/          # Vite + React
+└── docs/
+    └── PIPELINE.md    # Product/data-flow notes (if present locally)
+```
+
+## Requirements
+
+- **Python** 3.10+ (3.11+ recommended)
+- **Node.js** 18+ (for the frontend dev server and build)
+
+## Quick start
+
+### 1. Backend
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+cp .env.example .env
 ```
 
-数据目录默认：`backend/data/`（SQLite `app.db`、上传图片 `uploads/`）。可通过环境变量 `TOMATO_DATA_DIR` 覆盖。
+Edit `backend/.env` and set at least an **OpenRouter** or **OpenAI** API key (see inline comments in `.env`). If no key is set, `TOMATO_USE_STUB=1` uses fixed mock data to exercise the UI.
 
-**个人知识库（本机 Markdown）**
-
-识别成功的笔记会写入知识库目录（默认可在 `backend/data/knowledge_base/`），结构大致为：
-
-- `notes/<知识点标题>.md`：单条笔记（文件名由正文标题或首行内容自动推断，冲突时加任务 id 后缀；含 YAML 头信息 + 正文）
-- `知识库索引.md`：由**维护任务**生成的总览（主题分组、相对链接、整理建议）
-- `.kb_state.json`：最近一次维护时间与模式（机器可读，可忽略）
-
-知识库根目录**可放在代码仓库之外**（任意本机文件夹）。生效优先级：
-
-1. 环境变量 **`TOMATO_KB_DIR`**（若设置则唯一生效，适合部署/脚本固定路径）  
-2. 否则读取数据目录下的 **`kb_root.json`**（可在 Web 页「个人知识库」里填写路径并保存，或通过 `PUT /api/kb/root` 写入）  
-3. 若以上皆无，则默认为 **`{TOMATO_DATA_DIR}/knowledge_base`**
-
-`kb_root.json` 只存一条绝对路径字符串，笔记与索引均写入该路径；配置本身位于数据目录（默认 `backend/data/kb_root.json`，已被 `.gitignore` 忽略），不会污染仓库。
-
-#### 手写识别（真实内容）
-
-通过 **OpenAI 兼容** Chat Completions（vision）识别手写并整理为 **Markdown**。推荐 [OpenRouter](https://openrouter.ai/) 统一路由模型；也可直连 OpenAI 官方。
-
-**OpenRouter（推荐）**
-
-| 变量 | 说明 |
-|------|------|
-| `OPENROUTER_API_KEY` | **与 OpenAI 二选一**（若同时配置，优先使用 OpenRouter） |
-| `OPENROUTER_BASE_URL` | 可选，默认 `https://openrouter.ai/api/v1` |
-| `OPENROUTER_MODEL` | 可选，默认 `openai/gpt-4o-mini`（须支持 vision；slug 见 [OpenRouter 模型列表](https://openrouter.ai/models)） |
-| `OPENROUTER_APP_TITLE` | 可选，请求头 `X-Title`，默认 `Tomato Note Graph` |
-| `OPENROUTER_HTTP_REFERER` | 可选，请求头 `HTTP-Referer`，默认 `http://localhost:5173` |
-
-也可用 `OPENAI_MODEL` 指定 OpenRouter 上的模型 slug（与 `OPENROUTER_MODEL` 二选一，优先 `OPENROUTER_MODEL`）。
-
-**OpenAI 官方 / 其他兼容接口**
-
-| 变量 | 说明 |
-|------|------|
-| `OPENAI_API_KEY` | 未配置 `OPENROUTER_API_KEY` 时使用 |
-| `OPENAI_BASE_URL` | 可选，默认官方 |
-| `OPENAI_MODEL` | 可选，默认 `gpt-4o-mini` |
-
-**通用**
-
-| 变量 | 说明 |
-|------|------|
-| `TOMATO_USE_STUB` | 无 API Key 时返回固定假数据；**若已配置 Key 则忽略此项**（避免误留 `=1` 一直出假数据） |
-| `TOMATO_FORCE_STUB` | 设为 `1` 时**即使**有 Key 也返回假数据（仅调试） |
-| `TOMATO_IMAGE_MAX_EDGE` | 可选，上传图长边缩小上限（像素），默认 `2048` |
-| `TOMATO_MAX_TOKENS` | 可选，多模态回复上限，默认 `8192`（避免长笔记输出被截断） |
-
-**知识库与定期整理**
-
-| 变量 | 说明 |
-|------|------|
-| `TOMATO_KB_DIR` | 可选，**强制**知识库根目录（若设置则忽略 `kb_root.json` 与界面配置）；可指向仓库外绝对路径 |
-| `TOMATO_KB_MAINTENANCE` | 可选，设为 `0` 可关闭**后台定期**整理线程（仍可用 `POST /api/kb/maintain` 手动触发） |
-| `TOMATO_KB_MAINTENANCE_FIRST_DELAY_SEC` | 可选，启动后首次整理延迟（秒），默认 `120` |
-| `TOMATO_KB_MAINTENANCE_INTERVAL_SEC` | 可选，定期整理周期（秒），默认 `86400`（一天） |
-| `TOMATO_KB_MAINTENANCE_ON_SAVE` | 可选，每条笔记落盘后是否**再触发一次**整理（默认 `1`；频繁上传且在意费用可设 `0`） |
-| `TOMATO_KB_MAINTENANCE_LLM` | 可选，设为 `0` 时维护任务**不调用 LLM**，只生成基于文件列表的简单索引 |
-| `TOMATO_KB_MAINTENANCE_MODEL` | 可选，整理索引所用文本模型，默认与 `OPENROUTER_MODEL` / `OPENAI_MODEL` 相同 |
-| `TOMATO_KB_MAINTENANCE_MAX_TOKENS` | 可选，整理输出上限，默认 `4096` |
-| `TOMATO_KB_MANIFEST_MAX_CHARS` | 可选，维护时笔记摘录总字数上限，默认 `28000` |
-| `TOMATO_KB_NOTE_NAME_MAX_LEN` | 可选，由知识点标题生成的文件名主体最大字符数，默认 `72`，范围约 16–200 |
-| `TOMATO_TEXT_INPUT_MAX_CHARS` | 可选，单条文字笔记输入最大字符数，默认 `32000` |
-
-在 `backend/.env` 中配置（启动时已自动加载），例如 OpenRouter：
+Start the API on **port 8001** (must match the Vite proxy):
 
 ```bash
-OPENROUTER_API_KEY=sk-or-v1-...
-# OPENROUTER_MODEL=openai/gpt-4o-mini
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-然后：
+Open [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) for the OpenAPI UI. Health: [http://127.0.0.1:8001/health](http://127.0.0.1:8001/health) — `vision_mode` is one of `openrouter`, `openai`, `stub`, or `unconfigured`.
 
-```bash
-cd backend && source .venv/bin/activate
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
+### 2. Frontend
 
-详见 `backend/.env.example`。
-
-### 2. 前端
-
-新终端：
+In a second terminal:
 
 ```bash
 cd frontend
@@ -109,22 +72,47 @@ npm install
 npm run dev
 ```
 
-浏览器打开 Vite 提示的地址（一般为 `http://127.0.0.1:5173`）。开发模式下 `/api` 会代理到 `http://127.0.0.1:8000`。
+Open **http://127.0.0.1:5173** — Vite proxies `/api` and `/health` to `http://127.0.0.1:8001`.
 
-### 3. 试用
+> Run the backend (8001) and the dev server (5173) at the same time, or the page cannot reach the API.
 
-配置好 `OPENROUTER_API_KEY` 或 `OPENAI_API_KEY` 后，在页面**上传手写照片**或**粘贴文字** → 自动处理 → 展示 **Markdown**，并**保存到本机知识库目录**；可在「个人知识库」卡片中**自定义根目录**（任意本机路径，包括仓库外），或触发「立即整理」以更新 `知识库索引.md`。未配置 Key 时任务会失败，页面顶部也会提示；无 Key 联调 UI 可设 `TOMATO_USE_STUB=1`。若 `.env` 里曾开过 `TOMATO_USE_STUB=1` 且已填入 Key，现在会**自动走真实识别**，无需再手动删（仍想用假数据可设 `TOMATO_FORCE_STUB=1`）。
+## Using the web UI
 
-## API 摘要
+1. Create a job under “New job”, then **either** upload a handwritten photo **or** paste text and submit.
+2. Click **Start** and wait until the status goes from pending/processing to done.
+3. Read the rendered **Markdown** in the result area; if a note was saved, you’ll see the path relative to the knowledge base root.
+4. Under “Personal knowledge base” you can inspect the root, whether the path is locked by an environment variable, and **save a custom local path** (unless `TOMATO_KB_DIR` is set, which prevents UI changes). You can also trigger knowledge-base maintenance from the UI.
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/jobs` | 创建任务，返回 `job_id`、`upload_path`（照片）与 `text_path`（文字） |
-| POST | `/api/jobs/{id}/upload` | `multipart/form-data`，字段名 `file`（与下方 `text` 二选一） |
-| POST | `/api/jobs/{id}/text` | JSON `{"text":"..."}` 提交纯文字（与上传照片二选一） |
-| POST | `/api/jobs/{id}/start` | 在已上传照片**或**已提交文字后入队处理 |
-| GET | `/api/jobs/{id}` | 查询状态；`done` 时含 `markdown`；`kb_note_relative` 为笔记在知识库内的相对路径 |
-| GET | `/api/kb` | 知识库根目录、`root_source`（env / user_config / default）、是否可在线编辑等 |
-| PUT | `/api/kb/root` | JSON `{"path":"/绝对路径"}` 保存自定义根目录（写入 `kb_root.json`）；若已设 `TOMATO_KB_DIR` 则拒绝 |
-| DELETE | `/api/kb/root` | 删除 `kb_root.json`，恢复默认 `{data}/knowledge_base` |
-| POST | `/api/kb/maintain` | 异步触发一次知识库整理（重写 `知识库索引.md`） |
+The UI supports Chinese and English.
+
+## Common environment variables
+
+The full list is in `backend/.env.example`. Frequently used:
+
+| Variable | Purpose |
+|----------|---------|
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter and model slug (vision/chat) |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | OpenAI (or compatible) base and model name |
+| `TOMATO_DATA_DIR` | Data and SQLite root; default `backend/data` |
+| `TOMATO_KB_DIR` | Fix the knowledge base directory; cannot be changed from the web UI when set |
+| `TOMATO_USE_STUB` / `TOMATO_FORCE_STUB` | Use mock data without a key, or force stub even with a key |
+| `TOMATO_CORS_ORIGINS` | Comma-separated origins if the frontend is not on port 5173 |
+
+## API flow (summary)
+
+1. `POST /api/jobs` → `job_id`, `upload_path`, and `text_path`.
+2. `POST` to the right path: multipart file upload, **or** JSON `{"text":"..."}` (mutually exclusive).
+3. `POST /api/jobs/{job_id}/start` to enqueue processing.
+4. `GET /api/jobs/{job_id}` until `status` is `done` or `failed`; on success, `markdown` contains the result.
+
+See `/docs` for knowledge-base endpoints.
+
+## Production build
+
+Run `cd frontend && npm run build` — static files go to `frontend/dist/`. You must serve them behind a reverse proxy (or the same host) that forwards `/api` (and related routes) to the FastAPI app; the dev server proxy is only for local use.
+
+Harden the backend (HTTPS, CORS, auth) according to your environment; `uvicorn` in production is usually managed by a process supervisor.
+
+## License
+
+Use the repository’s license and contribution policy when available.
