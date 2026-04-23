@@ -262,11 +262,11 @@ export function App() {
   const dateLocale = locale === "zh" ? "zh-CN" : "en-US";
 
   return (
-    <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <div className="app-header__brand">
-            <div className="app-header__logo" aria-hidden>
+    <div className="app layout">
+      <header className="site-header reveal">
+        <div className="site-header__row">
+          <div className="site-header__brand">
+            <div className="site-header__mark" aria-hidden>
               🍅
             </div>
             <h1>{t("appTitle")}</h1>
@@ -290,17 +290,17 @@ export function App() {
             </button>
           </div>
         </div>
-        <p className="app-header__tagline">{t("tagline")}</p>
+        <p className="site-header__lede">{t("tagline")}</p>
       </header>
 
       {visionMode === "unconfigured" ? (
-        <div className="alert alert--warn" role="status">
+        <div className="alert alert--warn reveal reveal--2" role="status">
           {t("warnUnconfigured")}
         </div>
       ) : null}
       {kb ? (
-        <section className="card card--kb" aria-labelledby="kb-heading">
-          <h2 id="kb-heading" className="card__title">
+        <section className="panel panel--vault reveal reveal--2" aria-labelledby="kb-heading">
+          <h2 id="kb-heading" className="panel-heading">
             {t("cardKbTitle")}
           </h2>
           <p className="kb-path">
@@ -337,7 +337,12 @@ export function App() {
                   spellCheck={false}
                   disabled={kbPathSaving}
                 />
-                <button type="button" className="btn-secondary" disabled={kbPathSaving} onClick={() => void onKbSavePath()}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={kbPathSaving}
+                  onClick={() => void onKbSavePath()}
+                >
                   {kbPathSaving ? t("btnSaving") : t("btnSave")}
                 </button>
                 <button
@@ -365,7 +370,12 @@ export function App() {
             )}
           </div>
           <div className="kb-actions">
-            <button type="button" className="btn-secondary" disabled={kbMaintaining} onClick={() => void onKbMaintain()}>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={kbMaintaining}
+              onClick={() => void onKbMaintain()}
+            >
               {kbMaintaining ? t("btnMaintaining") : t("btnMaintain")}
             </button>
           </div>
@@ -373,71 +383,86 @@ export function App() {
       ) : null}
 
       {visionMode === "stub" ? (
-        <div className="alert alert--warn" role="status">
+        <div className="alert alert--warn reveal reveal--3" role="status">
           {t("warnStub")}
         </div>
       ) : null}
 
-      <section className="card card--hero" aria-labelledby="add-content-heading">
-        <h2 id="add-content-heading" className="card__title">
+      <section className="card card--hero reveal reveal--3" aria-labelledby="add-content-heading">
+        <h2 id="add-content-heading" className="section-heading">
           {t("addContentSection")}
         </h2>
-        <h3 className="card__subtitle">{t("uploadPhotoSubtitle")}</h3>
-        <div className="upload-row">
-          <label className="upload-btn">
-            <span className="upload-btn__icon" aria-hidden>
-              📷
-            </span>
-            {t("choosePhoto")}
-            <input type="file" accept="image/*" disabled={busy} onChange={(e) => void onFile(e.target.files?.[0])} />
-          </label>
-          {busy && busyMode === "photo" ? (
-            <div className="processing">
-              <span className="spinner" aria-hidden />
-              {t("processing")}
+        <div className="capture-grid">
+          <div className="capture-cell">
+            <h3 className="card__subtitle">{t("uploadPhotoSubtitle")}</h3>
+            <div className="upload-row">
+              <label className="upload-btn">
+                <span className="upload-btn__icon" aria-hidden>
+                  📷
+                </span>
+                {t("choosePhoto")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={busy}
+                  onChange={(e) => void onFile(e.target.files?.[0])}
+                />
+              </label>
+              {busy && busyMode === "photo" ? (
+                <div className="processing">
+                  <span className="spinner" aria-hidden />
+                  {t("processing")}
+                </div>
+              ) : !busy ? (
+                <p className="hint">{t("hintPhoto")}</p>
+              ) : null}
             </div>
-          ) : !busy ? (
-            <p className="hint">{t("hintPhoto")}</p>
-          ) : null}
-        </div>
-        <h3 className="card__subtitle card__subtitle--spaced">{t("textInputSubtitle")}</h3>
-        <div className="text-input-block">
-          <textarea
-            className="text-input-block__area"
-            value={textDraft}
-            onChange={(e) => setTextDraft(e.target.value)}
-            placeholder={t("textPlaceholder")}
-            rows={6}
-            disabled={busy}
-            spellCheck={true}
-          />
-          <div className="text-input-block__actions">
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={busy || !textDraft.trim()}
-              onClick={() => void onTextSubmit()}
-            >
-              {t("btnConvertText")}
-            </button>
-            {busy && busyMode === "text" ? (
-              <div className="processing processing--inline">
-                <span className="spinner" aria-hidden />
-                {t("processingText")}
+          </div>
+          <div className="capture-cell">
+            <h3 className="card__subtitle">{t("textInputSubtitle")}</h3>
+            <div className="text-input-block">
+              <textarea
+                className="text-input-block__area"
+                value={textDraft}
+                onChange={(e) => setTextDraft(e.target.value)}
+                placeholder={t("textPlaceholder")}
+                rows={6}
+                disabled={busy}
+                spellCheck={true}
+              />
+              <div className="text-input-block__actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={busy || !textDraft.trim()}
+                  onClick={() => void onTextSubmit()}
+                >
+                  {t("btnConvertText")}
+                </button>
+                {busy && busyMode === "text" ? (
+                  <div className="processing processing--inline">
+                    <span className="spinner" aria-hidden />
+                    {t("processingText")}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </div>
           </div>
         </div>
         {message ? <div className="inline-error">{message}</div> : null}
       </section>
 
       {job ? (
-        <section className="card" aria-labelledby="result-heading">
-          <h2 id="result-heading" className="card__title">
-            {t("resultSection")}
-          </h2>
+        <section className="card card--result reveal reveal--4" aria-labelledby="result-heading">
+          <div className="result-head">
+            <h2 id="result-heading" className="section-heading">
+              {t("resultSection")}
+            </h2>
+          </div>
           <div className="badge-row">
-            <span className={`badge ${job.status === "failed" ? "badge--fail" : job.status === "done" ? "badge--ok" : "badge--neutral"}`}>
+            <span
+              className={`badge ${job.status === "failed" ? "badge--fail" : job.status === "done" ? "badge--ok" : "badge--neutral"}`}
+            >
               {statusLabel(job.status, t)}
             </span>
             <span className="badge badge--neutral">
@@ -448,9 +473,7 @@ export function App() {
           {job.markdown ? (
             <>
               {job.kb_note_relative ? (
-                <p className="kb-save-hint">
-                  {t("savedToKb", { path: job.kb_note_relative })}
-                </p>
+                <p className="kb-save-hint">{t("savedToKb", { path: job.kb_note_relative })}</p>
               ) : null}
               <MarkdownResult source={job.markdown} />
               <details className="markdown-details">
@@ -460,21 +483,23 @@ export function App() {
             </>
           ) : job.status === "done" ? (
             <p className="empty-hint">
-              <div className="empty-hint__icon" aria-hidden>
+              <span className="empty-hint__icon" aria-hidden>
                 📭
-              </div>
+              </span>
               {t("noMarkdown")}
             </p>
           ) : null}
         </section>
       ) : !busy ? (
-        <section className="card">
-          <div className="empty-hint">
-            <div className="empty-hint__icon">📝</div>
+        <section className="card card--result reveal reveal--4">
+          <p className="empty-hint empty-hint--idle">
+            <span className="empty-hint__icon" aria-hidden>
+              📝
+            </span>
             {t("emptyUpload")}
-          </div>
+          </p>
         </section>
       ) : null}
-    </>
+    </div>
   );
 }
