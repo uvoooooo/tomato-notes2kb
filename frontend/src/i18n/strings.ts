@@ -66,7 +66,6 @@ export const STRINGS: Record<
     studyPlaceholder: string;
     studyErrUnconfigured: string;
     reviewCardTitle: string;
-    reviewCardIntro: string;
     reviewSelectLabel: string;
     reviewOptionNone: string;
     reviewPasteLabel: string;
@@ -156,8 +155,6 @@ export const STRINGS: Record<
     studyPlaceholder: "点击「抽一道题」开始。",
     studyErrUnconfigured: "无法出题：请先在 backend/.env 中配置 API Key 并重启后端。",
     reviewCardTitle: "仅复习",
-    reviewCardIntro:
-      "不必在此添加新内容：从下方知识库选一篇已保存的笔记，或粘贴任意 Markdown 即可抽题。可与上方「添加笔记」完全独立使用。",
     reviewSelectLabel: "从知识库选择",
     reviewOptionNone: "（未选）",
     reviewPasteLabel: "或粘贴要复习的原文",
@@ -172,7 +169,7 @@ export const STRINGS: Record<
     useResultInReview: "在复习区打开本结果",
     reviewPastePlaceholder: "可粘贴整篇 Markdown（不必与知识库中文件一致）",
     addModuleBlurb: "新增：从照片或文字生成 Markdown，可写入个人知识库。",
-    reviewModuleBlurb: "复习：不新增内容，只从知识库或粘贴的文本中抽题自测。",
+    reviewModuleBlurb: "从知识库或粘贴的文本中抽题自测",
     kbModuleBlurb: "本机知识库根目录、笔记位置与（可选的）维护任务。与下方两个模块独立。",
     kbLoading: "正在加载知识库信息…",
     kbLoadFailed: "无法从后端读取知识库配置。请确认 API 已启动（如 uvicorn :8001）。",
@@ -246,8 +243,6 @@ export const STRINGS: Record<
     studyPlaceholder: "Tap “Draw a question” to start.",
     studyErrUnconfigured: "Cannot generate a question. Configure an API key in backend/.env and restart the server.",
     reviewCardTitle: "Review",
-    reviewCardIntro:
-      "Add nothing new here: pick a saved note from the vault, or paste Markdown, then draw questions. Works independently of “Add a note” above.",
     reviewSelectLabel: "From vault",
     reviewOptionNone: "None",
     reviewPasteLabel: "Or paste what you want to review",
@@ -262,7 +257,7 @@ export const STRINGS: Record<
     useResultInReview: "Open in review",
     reviewPastePlaceholder: "Paste full Markdown (does not need to match a vault file)",
     addModuleBlurb: "Add: create Markdown from a photo or text, then save to your personal vault.",
-    reviewModuleBlurb: "Review: add nothing. Quiz from vault files or any pasted text.",
+    reviewModuleBlurb: "Quiz from vault files or any pasted text",
     kbModuleBlurb: "Local vault root, where notes go, and optional maintenance—separate from the two cards below.",
     kbLoading: "Loading vault info…",
     kbLoadFailed: "Could not load the vault. Is the API running (e.g. uvicorn on :8001)?",
