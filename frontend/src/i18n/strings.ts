@@ -50,7 +50,6 @@ export const STRINGS: Record<
     savedToKb: string;
     viewMarkdownSource: string;
     noMarkdown: string;
-    emptyUpload: string;
     statusPending: string;
     statusProcessing: string;
     statusDone: string;
@@ -139,7 +138,6 @@ export const STRINGS: Record<
     savedToKb: "已写入知识库：{{path}}（相对知识库根目录）",
     viewMarkdownSource: "查看 Markdown 源码",
     noMarkdown: "未返回 Markdown 内容",
-    emptyUpload: "上传照片或输入文字以开始",
     statusPending: "待处理",
     statusProcessing: "识别中",
     statusDone: "完成",
@@ -226,7 +224,6 @@ export const STRINGS: Record<
     savedToKb: "Saved to vault: {{path}} (relative to vault root)",
     viewMarkdownSource: "View Markdown source",
     noMarkdown: "No Markdown returned",
-    emptyUpload: "Upload a photo or enter text below to start",
     statusPending: "Pending",
     statusProcessing: "Processing",
     statusDone: "Done",

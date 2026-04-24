@@ -615,7 +615,6 @@ export function App() {
           {t("reviewCardTitle")}
         </h2>
         <p className="module-blurb">{t("reviewModuleBlurb")}</p>
-        <p className="review-card__intro">{t("reviewCardIntro")}</p>
         <div className="review-pick">
           <label className="review-pick__label" htmlFor="review-vault-select">
             {t("reviewSelectLabel")}
@@ -764,15 +763,6 @@ export function App() {
               {t("noMarkdown")}
             </p>
           ) : null}
-        </section>
-      ) : !busy ? (
-        <section className="card card--result module-block reveal reveal--6">
-          <p className="empty-hint empty-hint--idle">
-            <span className="empty-hint__icon" aria-hidden>
-              📝
-            </span>
-            {t("emptyUpload")}
-          </p>
         </section>
       ) : null}
     </div>
