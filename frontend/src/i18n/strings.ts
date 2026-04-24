@@ -56,6 +56,36 @@ export const STRINGS: Record<
     statusDone: string;
     statusFailed: string;
     processingMsg: string;
+    studySection: string;
+    studyIntro: string;
+    studyDraw: string;
+    studyAnother: string;
+    studyShowNote: string;
+    studyHideNote: string;
+    studyLoading: string;
+    studyPlaceholder: string;
+    studyErrUnconfigured: string;
+    reviewCardTitle: string;
+    reviewCardIntro: string;
+    reviewSelectLabel: string;
+    reviewOptionNone: string;
+    reviewPasteLabel: string;
+    reviewApplyPaste: string;
+    reviewLoadingNotes: string;
+    reviewListEmpty: string;
+    reviewFromFile: string;
+    reviewFromPaste: string;
+    reviewLoadFailed: string;
+    reviewNeedMaterial: string;
+    reviewClear: string;
+    useResultInReview: string;
+    reviewPastePlaceholder: string;
+    addModuleBlurb: string;
+    reviewModuleBlurb: string;
+    kbModuleBlurb: string;
+    kbLoading: string;
+    kbLoadFailed: string;
+    kbRetry: string;
   }
 > = {
   zh: {
@@ -116,6 +146,37 @@ export const STRINGS: Record<
     statusDone: "完成",
     statusFailed: "失败",
     processingMsg: "处理中…",
+    studySection: "自测复习",
+    studyIntro: "从当前识别结果中抽取一道问答题。先自己回忆答案，再按需查看原笔记对照。",
+    studyDraw: "抽一道题",
+    studyAnother: "换一题",
+    studyShowNote: "查看原笔记",
+    studyHideNote: "收起原笔记",
+    studyLoading: "正在出题…",
+    studyPlaceholder: "点击「抽一道题」开始。",
+    studyErrUnconfigured: "无法出题：请先在 backend/.env 中配置 API Key 并重启后端。",
+    reviewCardTitle: "仅复习",
+    reviewCardIntro:
+      "不必在此添加新内容：从下方知识库选一篇已保存的笔记，或粘贴任意 Markdown 即可抽题。可与上方「添加笔记」完全独立使用。",
+    reviewSelectLabel: "从知识库选择",
+    reviewOptionNone: "（未选）",
+    reviewPasteLabel: "或粘贴要复习的原文",
+    reviewApplyPaste: "使用粘贴内容",
+    reviewLoadingNotes: "正在加载笔记列表…",
+    reviewListEmpty: "当前知识库中还没有 .md 笔记；可先往库目录放入文件，或直接用下方粘贴。",
+    reviewFromFile: "知识库：",
+    reviewFromPaste: "粘贴内容",
+    reviewLoadFailed: "无法读取该笔记。",
+    reviewNeedMaterial: "请先从知识库选一篇，或粘贴内容并点击「使用粘贴内容」。",
+    reviewClear: "清除",
+    useResultInReview: "在复习区打开本结果",
+    reviewPastePlaceholder: "可粘贴整篇 Markdown（不必与知识库中文件一致）",
+    addModuleBlurb: "新增：从照片或文字生成 Markdown，可写入个人知识库。",
+    reviewModuleBlurb: "复习：不新增内容，只从知识库或粘贴的文本中抽题自测。",
+    kbModuleBlurb: "本机知识库根目录、笔记位置与（可选的）维护任务。与下方两个模块独立。",
+    kbLoading: "正在加载知识库信息…",
+    kbLoadFailed: "无法从后端读取知识库配置。请确认 API 已启动（如 uvicorn :8001）。",
+    kbRetry: "重试",
   },
   en: {
     appTitle: "Tomato Notes2KB",
@@ -174,6 +235,38 @@ export const STRINGS: Record<
     statusDone: "Done",
     statusFailed: "Failed",
     processingMsg: "Working…",
+    studySection: "Review quiz",
+    studyIntro:
+      "Draw a short question from the current result. Try to answer from memory, then check the original note if needed.",
+    studyDraw: "Draw a question",
+    studyAnother: "New question",
+    studyShowNote: "View original note",
+    studyHideNote: "Hide original",
+    studyLoading: "Asking the model…",
+    studyPlaceholder: "Tap “Draw a question” to start.",
+    studyErrUnconfigured: "Cannot generate a question. Configure an API key in backend/.env and restart the server.",
+    reviewCardTitle: "Review",
+    reviewCardIntro:
+      "Add nothing new here: pick a saved note from the vault, or paste Markdown, then draw questions. Works independently of “Add a note” above.",
+    reviewSelectLabel: "From vault",
+    reviewOptionNone: "None",
+    reviewPasteLabel: "Or paste what you want to review",
+    reviewApplyPaste: "Use pasted text",
+    reviewLoadingNotes: "Loading note list…",
+    reviewListEmpty: "No .md notes in the vault yet; add files to the notes folder, or use paste below.",
+    reviewFromFile: "Vault:",
+    reviewFromPaste: "Pasted",
+    reviewLoadFailed: "Could not read that note.",
+    reviewNeedMaterial: "Select a note from the vault, or paste text and tap “Use pasted text”.",
+    reviewClear: "Clear",
+    useResultInReview: "Open in review",
+    reviewPastePlaceholder: "Paste full Markdown (does not need to match a vault file)",
+    addModuleBlurb: "Add: create Markdown from a photo or text, then save to your personal vault.",
+    reviewModuleBlurb: "Review: add nothing. Quiz from vault files or any pasted text.",
+    kbModuleBlurb: "Local vault root, where notes go, and optional maintenance—separate from the two cards below.",
+    kbLoading: "Loading vault info…",
+    kbLoadFailed: "Could not load the vault. Is the API running (e.g. uvicorn on :8001)?",
+    kbRetry: "Retry",
   },
 };
 

@@ -56,16 +56,54 @@ export function App() {
   const [job, setJob] = useState<JobResponse | null>(null);
   const [visionMode, setVisionMode] = useState<VisionMode>("unknown");
   const [kb, setKb] = useState<KbDashboard | null>(null);
+  const [kbStatus, setKbStatus] = useState<"loading" | "ready" | "error">("loading");
   const [kbMaintaining, setKbMaintaining] = useState(false);
   const [kbPathInput, setKbPathInput] = useState("");
   const [kbPathSaving, setKbPathSaving] = useState(false);
   const [kbPathMessage, setKbPathMessage] = useState<string | null>(null);
   const [textDraft, setTextDraft] = useState("");
   const [busyMode, setBusyMode] = useState<"photo" | "text" | null>(null);
+  const [studyQuestion, setStudyQuestion] = useState<string | null>(null);
+  const [studyShowOriginal, setStudyShowOriginal] = useState(false);
+  const [studyLoading, setStudyLoading] = useState(false);
+  const [studyError, setStudyError] = useState<string | null>(null);
+  const [reviewMaterial, setReviewMaterial] = useState("");
+  const [reviewPaste, setReviewPaste] = useState("");
+  const [kbNotes, setKbNotes] = useState<{ path: string; label: string }[]>([]);
+  const [notesListLoading, setNotesListLoading] = useState(false);
+  const [selectedVaultPath, setSelectedVaultPath] = useState("");
+  const [reviewLoadError, setReviewLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setKbPathMessage(null);
   }, [locale]);
+
+  useEffect(() => {
+    setStudyQuestion(null);
+    setStudyShowOriginal(false);
+    setStudyError(null);
+  }, [reviewMaterial]);
+
+  const refreshNoteList = useCallback(async () => {
+    setNotesListLoading(true);
+    try {
+      const r = await fetch("/api/kb/notes");
+      if (!r.ok) {
+        setKbNotes([]);
+        return;
+      }
+      const j: { items: { path: string; label: string }[] } = await r.json();
+      setKbNotes(j.items);
+    } catch {
+      setKbNotes([]);
+    } finally {
+      setNotesListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshNoteList();
+  }, [kb?.note_count, kb?.root, refreshNoteList]);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,15 +126,22 @@ export function App() {
   }, []);
 
   const refreshKb = useCallback(async () => {
+    setKbStatus("loading");
     try {
       const r = await fetch("/api/kb");
-      if (!r.ok) return;
+      if (!r.ok) {
+        setKb(null);
+        setKbStatus("error");
+        return;
+      }
       const j: KbDashboard = await r.json();
       setKb(j);
       setKbPathInput(j.root);
       setKbPathMessage(null);
+      setKbStatus("ready");
     } catch {
       setKb(null);
+      setKbStatus("error");
     }
   }, []);
 
@@ -261,6 +306,94 @@ export function App() {
 
   const dateLocale = locale === "zh" ? "zh-CN" : "en-US";
 
+  const drawStudyQuestion = useCallback(async () => {
+    const md = reviewMaterial.trim();
+    if (!md) {
+      setStudyError(t("reviewNeedMaterial"));
+      return;
+    }
+    setStudyLoading(true);
+    setStudyError(null);
+    setStudyShowOriginal(false);
+    try {
+      const r = await fetch("/api/study/question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markdown: md, locale }),
+      });
+      const data: unknown = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const d = data as { detail?: unknown };
+        const detail = d.detail;
+        const msg =
+          typeof detail === "string" && (detail.includes("llm_unconfigured") || r.status === 503)
+            ? t("studyErrUnconfigured")
+            : typeof detail === "string"
+              ? detail
+              : `HTTP ${r.status}`;
+        setStudyError(msg);
+        return;
+      }
+      const out = data as { question?: string };
+      if (out.question) setStudyQuestion(out.question);
+      else setStudyError("empty response");
+    } catch {
+      setStudyError(t("errNetwork"));
+    } finally {
+      setStudyLoading(false);
+    }
+  }, [reviewMaterial, locale, t]);
+
+  const onVaultNoteChange = (path: string) => {
+    setSelectedVaultPath(path);
+    if (!path) return;
+    setReviewLoadError(null);
+    void (async () => {
+      try {
+        const r = await fetch(`/api/kb/notes/content?${new URLSearchParams({ path })}`);
+        const data: unknown = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const d = data as { detail?: unknown };
+          setReviewLoadError(
+            typeof d.detail === "string" ? d.detail : t("reviewLoadFailed"),
+          );
+          return;
+        }
+        const md = (data as { markdown: string }).markdown;
+        setReviewMaterial(md);
+        setReviewPaste(md);
+      } catch {
+        setReviewLoadError(t("errNetwork"));
+      }
+    })();
+  };
+
+  const onApplyReviewPaste = () => {
+    const t0 = reviewPaste.trim();
+    if (!t0) return;
+    setReviewMaterial(t0);
+    setSelectedVaultPath("");
+    setReviewLoadError(null);
+  };
+
+  const onClearReview = () => {
+    setReviewMaterial("");
+    setReviewPaste("");
+    setSelectedVaultPath("");
+    setReviewLoadError(null);
+  };
+
+  const openResultInReview = () => {
+    if (!job?.markdown) return;
+    setReviewMaterial(job.markdown);
+    setReviewPaste(job.markdown);
+    setSelectedVaultPath("");
+    setReviewLoadError(null);
+    requestAnimationFrame(() => {
+      document.getElementById("review-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   return (
     <div className="app layout">
       <header className="site-header reveal">
@@ -298,89 +431,106 @@ export function App() {
           {t("warnUnconfigured")}
         </div>
       ) : null}
-      {kb ? (
-        <section className="panel panel--vault reveal reveal--2" aria-labelledby="kb-heading">
-          <h2 id="kb-heading" className="panel-heading">
-            {t("cardKbTitle")}
-          </h2>
-          <p className="kb-path">
-            <span className="kb-path__label">{t("rootDir")}</span>
-            <code className="kb-path__value">{kb.root}</code>
+      <section
+        className="panel panel--vault panel--kb-module reveal reveal--2"
+        aria-labelledby="kb-heading"
+      >
+        <h2 id="kb-heading" className="panel-heading">
+          {t("cardKbTitle")}
+        </h2>
+        <p className="module-blurb module-blurb--tight">{t("kbModuleBlurb")}</p>
+        {kbStatus === "loading" ? (
+          <p className="kb-panel-status kb-panel-status--loading" role="status">
+            {t("kbLoading")}
           </p>
-          <p className="kb-meta">
-            {t("kbMetaSourcePrefix")}
-            <strong>{rootSourceLabel(kb.root_source)}</strong>
-            {locale === "zh" ? "。" : ". "}
-            {kb.root_editable_via_ui ? (
-              <>{t("kbMetaCustomPath", { path: kb.kb_settings_file })}</>
-            ) : (
-              <>{t("kbMetaEnvLocked")}</>
-            )}
-          </p>
-          <p className="kb-meta">
-            {t("kbMetaNotesLocation", { notes: kb.notes_subdir, index: kb.index_file })}
-          </p>
-          {kb.root_editable_via_ui ? (
-            <div className="kb-path-form">
-              <label className="kb-path-form__label" htmlFor="kb-root-input">
-                {t("kbPathLabel")}
-              </label>
-              <div className="kb-path-form__row">
-                <input
-                  id="kb-root-input"
-                  type="text"
-                  className="kb-path-form__input"
-                  value={kbPathInput}
-                  onChange={(e) => setKbPathInput(e.target.value)}
-                  placeholder={t("placeholderVault")}
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={kbPathSaving}
-                />
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  disabled={kbPathSaving}
-                  onClick={() => void onKbSavePath()}
-                >
-                  {kbPathSaving ? t("btnSaving") : t("btnSave")}
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled={kbPathSaving}
-                  onClick={() => void onKbResetPath()}
-                >
-                  {t("btnResetDefault")}
-                </button>
-              </div>
-              {kbPathMessage ? <p className="kb-path-form__hint">{kbPathMessage}</p> : null}
-            </div>
-          ) : null}
-          <div className="kb-stats">
-            <span className="badge badge--neutral">{t("badgeNotesCount", { count: kb.note_count })}</span>
-            {kb.last_maintenance_at ? (
-              <span className="badge badge--neutral">
-                {t("badgeLastMaintained")}{" "}
-                {new Date(kb.last_maintenance_at).toLocaleString(dateLocale)}
-                {kb.last_maintenance_mode ? ` · ${kb.last_maintenance_mode}` : ""}
-              </span>
-            ) : (
-              <span className="badge badge--neutral">{t("badgeNoMaintenanceYet")}</span>
-            )}
-          </div>
-          <div className="kb-actions">
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={kbMaintaining}
-              onClick={() => void onKbMaintain()}
-            >
-              {kbMaintaining ? t("btnMaintaining") : t("btnMaintain")}
+        ) : kbStatus === "error" || !kb ? (
+          <div className="kb-panel-status kb-panel-status--error" role="alert">
+            <p className="kb-panel-status__msg">{t("kbLoadFailed")}</p>
+            <button type="button" className="btn-secondary" onClick={() => void refreshKb()}>
+              {t("kbRetry")}
             </button>
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <>
+            <p className="kb-path">
+              <span className="kb-path__label">{t("rootDir")}</span>
+              <code className="kb-path__value">{kb.root}</code>
+            </p>
+            <p className="kb-meta">
+              {t("kbMetaSourcePrefix")}
+              <strong>{rootSourceLabel(kb.root_source)}</strong>
+              {locale === "zh" ? "。" : ". "}
+              {kb.root_editable_via_ui ? (
+                <>{t("kbMetaCustomPath", { path: kb.kb_settings_file })}</>
+              ) : (
+                <>{t("kbMetaEnvLocked")}</>
+              )}
+            </p>
+            <p className="kb-meta">
+              {t("kbMetaNotesLocation", { notes: kb.notes_subdir, index: kb.index_file })}
+            </p>
+            {kb.root_editable_via_ui ? (
+              <div className="kb-path-form">
+                <label className="kb-path-form__label" htmlFor="kb-root-input">
+                  {t("kbPathLabel")}
+                </label>
+                <div className="kb-path-form__row">
+                  <input
+                    id="kb-root-input"
+                    type="text"
+                    className="kb-path-form__input"
+                    value={kbPathInput}
+                    onChange={(e) => setKbPathInput(e.target.value)}
+                    placeholder={t("placeholderVault")}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={kbPathSaving}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={kbPathSaving}
+                    onClick={() => void onKbSavePath()}
+                  >
+                    {kbPathSaving ? t("btnSaving") : t("btnSave")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={kbPathSaving}
+                    onClick={() => void onKbResetPath()}
+                  >
+                    {t("btnResetDefault")}
+                  </button>
+                </div>
+                {kbPathMessage ? <p className="kb-path-form__hint">{kbPathMessage}</p> : null}
+              </div>
+            ) : null}
+            <div className="kb-stats">
+              <span className="badge badge--neutral">{t("badgeNotesCount", { count: kb.note_count })}</span>
+              {kb.last_maintenance_at ? (
+                <span className="badge badge--neutral">
+                  {t("badgeLastMaintained")}{" "}
+                  {new Date(kb.last_maintenance_at).toLocaleString(dateLocale)}
+                  {kb.last_maintenance_mode ? ` · ${kb.last_maintenance_mode}` : ""}
+                </span>
+              ) : (
+                <span className="badge badge--neutral">{t("badgeNoMaintenanceYet")}</span>
+              )}
+            </div>
+            <div className="kb-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={kbMaintaining}
+                onClick={() => void onKbMaintain()}
+              >
+                {kbMaintaining ? t("btnMaintaining") : t("btnMaintain")}
+              </button>
+            </div>
+          </>
+        )}
+      </section>
 
       {visionMode === "stub" ? (
         <div className="alert alert--warn reveal reveal--3" role="status">
@@ -388,10 +538,14 @@ export function App() {
         </div>
       ) : null}
 
-      <section className="card card--hero reveal reveal--3" aria-labelledby="add-content-heading">
+      <section
+        className="card card--add-note card--hero module-block reveal reveal--4"
+        aria-labelledby="add-content-heading"
+      >
         <h2 id="add-content-heading" className="section-heading">
           {t("addContentSection")}
         </h2>
+        <p className="module-blurb">{t("addModuleBlurb")}</p>
         <div className="capture-grid">
           <div className="capture-cell">
             <h3 className="card__subtitle">{t("uploadPhotoSubtitle")}</h3>
@@ -452,8 +606,122 @@ export function App() {
         {message ? <div className="inline-error">{message}</div> : null}
       </section>
 
+      <section
+        className="card card--review module-block reveal reveal--5"
+        id="review-section"
+        aria-labelledby="review-card-heading"
+      >
+        <h2 id="review-card-heading" className="section-heading">
+          {t("reviewCardTitle")}
+        </h2>
+        <p className="module-blurb">{t("reviewModuleBlurb")}</p>
+        <p className="review-card__intro">{t("reviewCardIntro")}</p>
+        <div className="review-pick">
+          <label className="review-pick__label" htmlFor="review-vault-select">
+            {t("reviewSelectLabel")}
+          </label>
+          {notesListLoading ? (
+            <p className="review-pick__hint">{t("reviewLoadingNotes")}</p>
+          ) : (
+            <select
+              id="review-vault-select"
+              className="review-pick__select"
+              value={selectedVaultPath}
+              onChange={(e) => onVaultNoteChange(e.target.value)}
+            >
+              <option value="">{t("reviewOptionNone")}</option>
+              {kbNotes.map((n) => (
+                <option key={n.path} value={n.path}>
+                  {n.label} — {n.path}
+                </option>
+              ))}
+            </select>
+          )}
+          {kbStatus === "ready" && kb && kbNotes.length === 0 && !notesListLoading ? (
+            <p className="review-pick__empty">{t("reviewListEmpty")}</p>
+          ) : null}
+          {reviewLoadError ? <p className="review-pick__err">{reviewLoadError}</p> : null}
+        </div>
+        <div className="review-paste">
+          <label className="review-pick__label" htmlFor="review-paste-area">
+            {t("reviewPasteLabel")}
+          </label>
+          <textarea
+            id="review-paste-area"
+            className="text-input-block__area review-paste__area"
+            value={reviewPaste}
+            onChange={(e) => setReviewPaste(e.target.value)}
+            rows={5}
+            spellCheck={true}
+            placeholder={t("reviewPastePlaceholder")}
+          />
+          <div className="review-paste__row">
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={!reviewPaste.trim()}
+              onClick={onApplyReviewPaste}
+            >
+              {t("reviewApplyPaste")}
+            </button>
+            <button type="button" className="btn-ghost" disabled={!reviewMaterial.trim()} onClick={onClearReview}>
+              {t("reviewClear")}
+            </button>
+          </div>
+        </div>
+        {reviewMaterial.trim() ? (
+          <p className="review-source-hint" aria-live="polite">
+            {selectedVaultPath
+              ? `${t("reviewFromFile")} ${selectedVaultPath}`
+              : t("reviewFromPaste")}
+          </p>
+        ) : null}
+        {reviewMaterial.trim() ? (
+          <div className="study-quiz" aria-labelledby="study-heading">
+            <h3 id="study-heading" className="study-quiz__title">
+              {t("studySection")}
+            </h3>
+            <p className="study-quiz__intro">{t("studyIntro")}</p>
+            <div className="study-quiz__actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={studyLoading}
+                onClick={() => void drawStudyQuestion()}
+              >
+                {studyLoading ? t("studyLoading") : studyQuestion ? t("studyAnother") : t("studyDraw")}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setStudyShowOriginal((v) => !v)}
+              >
+                {studyShowOriginal ? t("studyHideNote") : t("studyShowNote")}
+              </button>
+            </div>
+            {studyError ? <p className="study-quiz__err">{studyError}</p> : null}
+            <div
+              className="study-quiz__question"
+              role={studyQuestion ? "status" : undefined}
+              aria-live="polite"
+            >
+              {studyQuestion ? (
+                <p className="study-quiz__question-text">{studyQuestion}</p>
+              ) : (
+                <p className="study-quiz__placeholder">{t("studyPlaceholder")}</p>
+              )}
+            </div>
+            {studyShowOriginal && reviewMaterial ? (
+              <div className="study-quiz__note" aria-label={t("studyShowNote")}>
+                <MarkdownResult source={reviewMaterial} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
       {job ? (
-        <section className="card card--result reveal reveal--4" aria-labelledby="result-heading">
+        <section className="card card--result module-block reveal reveal--6" aria-labelledby="result-heading">
           <div className="result-head">
             <h2 id="result-heading" className="section-heading">
               {t("resultSection")}
@@ -480,6 +748,13 @@ export function App() {
                 <summary>{t("viewMarkdownSource")}</summary>
                 <pre>{job.markdown}</pre>
               </details>
+              {job.status === "done" && job.markdown ? (
+                <p className="result-to-review">
+                  <button type="button" className="btn-ghost" onClick={openResultInReview}>
+                    {t("useResultInReview")}
+                  </button>
+                </p>
+              ) : null}
             </>
           ) : job.status === "done" ? (
             <p className="empty-hint">
@@ -491,7 +766,7 @@ export function App() {
           ) : null}
         </section>
       ) : !busy ? (
-        <section className="card card--result reveal reveal--4">
+        <section className="card card--result module-block reveal reveal--6">
           <p className="empty-hint empty-hint--idle">
             <span className="empty-hint__icon" aria-hidden>
               📝

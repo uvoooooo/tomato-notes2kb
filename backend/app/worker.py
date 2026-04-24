@@ -306,3 +306,66 @@ def run_text_pipeline(raw_text: str) -> str:
         )
 
     return _text_to_markdown(raw_text)
+
+
+_QUIZ_SYSTEM_ZH = """你是学习辅助助手。根据用户提供的笔记（可为 Markdown），提出**一个**简短、可作答的复习问题，用于自测对内容的理解。
+只输出问题本身：不要编号、不要“问题：”“Q：”等前缀，不要换行，不要解释，不要给出答案或提示。"""
+
+_QUIZ_SYSTEM_EN = """You are a study assistant. From the user's note (may be Markdown), write **one** short, answerable review question to check understanding of the content.
+Output only the question: no numbering, no prefix like "Q:" or "Question:", no line breaks, no explanation, no answer or hints."""
+
+_QUIZ_USER_ZH = "以下为本期笔记，请只输出一道复习题：\n\n"
+_QUIZ_USER_EN = "Here is the note. Output a single review question only:\n\n"
+
+
+def _stub_quiz_question(locale: str) -> str:
+    if (locale or "zh").strip().lower().startswith("en"):
+        return "What is the main theme summarized in the first section of this note? (stub)"
+    return "这份笔记在开头部分概括的主线是什么？（stub）"
+
+
+def generate_study_question(markdown: str, locale: str) -> str:
+    """从笔记正文生成一道自测问答题；与图片/文字 pipeline 共用 API Key 与 stub 规则。"""
+    text = (markdown or "").strip()
+    if not text:
+        raise ValueError("empty_markdown")
+
+    force_stub = os.environ.get("TOMATO_FORCE_STUB", "").strip().lower() in ("1", "true", "yes")
+    stub_env = os.environ.get("TOMATO_USE_STUB", "").strip().lower() in ("1", "true", "yes")
+    if force_stub:
+        logger.info("TOMATO_FORCE_STUB：自测题为占位")
+        return _stub_quiz_question(locale)
+    if stub_env and not _has_vision_key():
+        return _stub_quiz_question(locale)
+    if stub_env and _has_vision_key():
+        logger.warning("已配置 API Key，TOMATO_USE_STUB 在自测题中将被忽略（同文字任务）。")
+
+    max_in = int(os.environ.get("TOMATO_QUIZ_INPUT_MAX_CHARS", "32000"))
+    if len(text) > max_in:
+        text = text[:max_in]
+
+    is_en = (locale or "zh").strip().lower().startswith("en")
+    system = _QUIZ_SYSTEM_EN if is_en else _QUIZ_SYSTEM_ZH
+    user_prefix = _QUIZ_USER_EN if is_en else _QUIZ_USER_ZH
+    max_out = int(os.environ.get("TOMATO_QUIZ_MAX_TOKENS", "512"))
+
+    client = _build_client()
+    model = _resolve_model()
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_prefix + text},
+        ],
+        max_tokens=max_out,
+        temperature=0.75,
+    )
+    raw = (completion.choices[0].message.content or "").strip()
+    raw = raw.replace("\n", " ").strip()
+    if raw.startswith(('"', "「", "“")):
+        raw = raw.strip('"“”「」')
+    if not raw:
+        raise ValueError("model_returned_empty_question")
+    if len(raw) > 2000:
+        raw = raw[:2000] + "…"
+    return raw

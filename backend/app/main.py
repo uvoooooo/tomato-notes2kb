@@ -7,23 +7,27 @@ import threading
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app.db import JobRow, JobStore
 from app.knowledge_base import (
     clear_user_kb_root,
+    list_notes_for_api,
     note_relative_path,
     read_kb_dashboard,
+    read_note_content_safe,
     resolve_kb_root,
     run_kb_maintenance,
     save_note_markdown,
     set_user_kb_root,
+    validate_notes_relative_path,
 )
+from app.worker import VisionNotConfiguredError, generate_study_question
 from app.worker import run_pipeline as run_pipeline_sync
 from app.worker import run_text_pipeline as run_text_pipeline_sync
 
@@ -83,7 +87,9 @@ def root() -> dict[str, Any]:
         "docs": "/docs",
         "health": "/health",
         "api": "/api/jobs",
+        "study_question": "/api/study/question",
         "knowledge_base": "/api/kb",
+        "kb_notes": "/api/kb/notes",
     }
 
 
@@ -125,6 +131,37 @@ class KbRootUpdate(BaseModel):
 
 class TextJobBody(BaseModel):
     text: str = Field(..., min_length=1, description="原始文字，将经 LLM 整理为 Markdown")
+
+
+class StudyQuestionBody(BaseModel):
+    markdown: str = Field(
+        ...,
+        min_length=1,
+        max_length=500_000,
+        description="当前笔记 Markdown，用于生成自测题",
+    )
+    locale: Literal["zh", "en"] = Field(
+        default="zh",
+        description="问题所用语言，与界面语言一致",
+    )
+
+
+class StudyQuestionResponse(BaseModel):
+    question: str
+
+
+class KbNoteListItem(BaseModel):
+    path: str
+    label: str
+
+
+class KbNoteListResponse(BaseModel):
+    items: list[KbNoteListItem]
+
+
+class KbNoteContentResponse(BaseModel):
+    path: str
+    markdown: str
 
 
 def _maybe_kb_maintain_on_save(kb_root: Path) -> None:
@@ -253,6 +290,23 @@ def _kb_note_rel_for_row(row: JobRow) -> str | None:
     return note_relative_path(row.id, row.created_at)
 
 
+@app.post("/api/study/question", response_model=StudyQuestionResponse)
+def post_study_question(body: StudyQuestionBody) -> StudyQuestionResponse:
+    """从笔记正文抽一道可自测的复习问答题（与识别 pipeline 共用模型与 API Key）。"""
+    try:
+        q = generate_study_question(body.markdown, body.locale)
+    except VisionNotConfiguredError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="llm_unconfigured: 请在 backend/.env 配置 OPENROUTER_API_KEY 或 OPENAI_API_KEY。",
+        ) from e
+    except ValueError as e:
+        if "empty" in str(e).lower():
+            raise HTTPException(status_code=400, detail="empty_markdown") from e
+        raise HTTPException(status_code=502, detail=f"question_generation_failed: {e}") from e
+    return StudyQuestionResponse(question=q)
+
+
 @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
 def get_job(job_id: str) -> JobStatusResponse:
     row = store.get(job_id)
@@ -270,8 +324,34 @@ def get_job(job_id: str) -> JobStatusResponse:
 
 @app.get("/api/kb")
 def get_knowledge_base() -> dict[str, Any]:
-    """本机个人知识库目录与维护状态（供前端展示路径）。"""
+    """本机个人知识库目录与维护状态（供前端展示路径与统计）。"""
     return read_kb_dashboard(DATA_DIR)
+
+
+@app.get("/api/kb/notes", response_model=KbNoteListResponse)
+def list_kb_notes() -> KbNoteListResponse:
+    """列出知识库 `notes/` 下已有 .md 文件，供「仅复习」时选择。"""
+    kb = resolve_kb_root(DATA_DIR)
+    raw = list_notes_for_api(kb)
+    return KbNoteListResponse(
+        items=[KbNoteListItem(path=x["path"], label=x["label"]) for x in raw],
+    )
+
+
+@app.get("/api/kb/notes/content", response_model=KbNoteContentResponse)
+def get_kb_note_content(
+    path: str = Query(..., min_length=1, description="相对知识库根，如 notes/foo.md"),
+) -> KbNoteContentResponse:
+    """安全读取单篇笔记正文（仅允许 notes/*.md）。"""
+    p = path.strip()
+    try:
+        norm = validate_notes_relative_path(p)
+        text = read_note_content_safe(resolve_kb_root(DATA_DIR), norm)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="note_not_found") from e
+    return KbNoteContentResponse(path=norm, markdown=text)
 
 
 @app.put("/api/kb/root")

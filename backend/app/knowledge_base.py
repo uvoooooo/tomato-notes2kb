@@ -234,6 +234,49 @@ def _list_note_paths(kb_root: Path) -> list[Path]:
     return sorted(d.glob("*.md"))
 
 
+def validate_notes_relative_path(rel: str) -> str:
+    """仅允许 `notes/文件名.md` 形式，不得含 .. 或绝对路径段。"""
+    r = rel.strip().replace("\\", "/")
+    if ".." in r or r.startswith("/"):
+        raise ValueError("invalid_path")
+    if not re.match(r"^notes/[^/\\]+\.md$", r, re.IGNORECASE):
+        raise ValueError("invalid_path")
+    return r
+
+
+def list_notes_for_api(kb_root: Path) -> list[dict[str, str]]:
+    """供 GET /api/kb/notes：返回 path（相对根）与展示用 label。"""
+    items: list[dict[str, str]] = []
+    try:
+        root = kb_root.resolve()
+    except OSError:
+        return items
+    for p in _list_note_paths(kb_root):
+        try:
+            rel = p.resolve().relative_to(root).as_posix()
+        except ValueError:
+            continue
+        try:
+            raw = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        title = _first_heading_line(raw) or p.stem
+        items.append({"path": rel, "label": title})
+    return items
+
+
+def read_note_content_safe(kb_root: Path, rel: str) -> str:
+    r = validate_notes_relative_path(rel)
+    root = kb_root.resolve()
+    p = (root / r).resolve()
+    p.relative_to(root)  # 越界则抛
+    if not p.is_file():
+        raise FileNotFoundError(r)
+    if p.suffix.lower() != ".md":
+        raise ValueError("not_markdown")
+    return p.read_text(encoding="utf-8", errors="replace")
+
+
 def _build_manifest_for_llm(kb_root: Path) -> tuple[str, int]:
     """供维护任务使用的纯文本清单；控制总长度避免撑爆上下文。"""
     paths = _list_note_paths(kb_root)
