@@ -16,6 +16,4 @@ frontend/dist/
 # Editor / OS
 .DS_Store
 
-docs/PIPELINE.md
-
 .cursorrules/

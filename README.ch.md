@@ -31,7 +31,7 @@ tomato-note-graph/
 │   └── requirements.txt
 ├── frontend/          # Vite + React 网页
 └── docs/
-    └── PIPELINE.md    # 产品/数据流与路线说明（若本地存在，可作为设计参考）
+    └── PIPELINE.md    # 产品/数据流说明
 ```
 
 ## 环境要求
@@ -113,4 +113,8 @@ npm run dev
 - `GET /api/kb/notes`：列出 `notes/` 下 `.md`；`GET /api/kb/notes/content?path=notes/….md`：读取单篇（路径校验，防越界）。
 - `POST /api/study/question`：请求体 JSON `{"markdown":"...","locale":"zh"|"en"}`，返回 `{"question":"..."}`，用于自测题（与主流程共用模型与 Key）。
 
-完整请求体/响应结构见后端 OpenAPI（启动 API 后打开 `/docs`）。
+完整请求体/响应结构见后端 **OpenAPI 交互文档**（`http://127.0.0.1:8001/docs`；此处的 `/docs` 指 API 路径，不是本仓库的 `docs/` 目录）。数据流说明见 [docs/PIPELINE.md](docs/PIPELINE.md)。
+
+## 许可
+
+[MIT](LICENSE) — 全文见仓库内 `LICENSE` 文件。

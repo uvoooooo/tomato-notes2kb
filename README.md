@@ -31,7 +31,7 @@ tomato-note-graph/
 │   └── requirements.txt
 ├── frontend/          # Vite + React
 └── docs/
-    └── PIPELINE.md    # Product/data-flow notes (if present locally)
+    └── PIPELINE.md    # Product / data-flow
 ```
 
 ## Requirements
@@ -113,7 +113,7 @@ The full list is in `backend/.env.example`. Frequently used:
 - `GET /api/kb/notes` — list `notes/*.md` in the vault; `GET /api/kb/notes/content?path=notes/....md` — read one file (path validated, no traversal).
 - `POST /api/study/question` with JSON `{"markdown":"...","locale":"zh"|"en"}` — returns `{"question":"..."}` for the self-test (same LLM as note processing).
 
-Full schemas are in `/docs`.
+Request/response models match the **interactive OpenAPI** at `http://127.0.0.1:8001/docs` (path `/docs` on the API server, not a folder in this repo). Human-readable pipeline notes: [docs/PIPELINE.md](docs/PIPELINE.md).
 
 ## Production build
 
@@ -123,4 +123,4 @@ Harden the backend (HTTPS, CORS, auth) according to your environment; `uvicorn` 
 
 ## License
 
-Use the repository’s license and contribution policy when available.
+[MIT](LICENSE) — see the file for the full text.
